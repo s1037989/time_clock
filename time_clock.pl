@@ -71,7 +71,7 @@ __DATA__
 % foreach my $user ( @{$timeclock->users} ) {
   % my $status = $timeclock->status($user->{id});
   Name: <%= $timeclock->user($user->{id})->{first_name} %><br />
-  Status: <%= $status ? "Active since $status->{time_in} from $status->{time_in_lat} $status->{time_in_lon}" : 'Not active' %><hr />
+  Status: <%= $status ? "Active since $status->{time_in} ($status->{time_in_age}) from $status->{time_in_lat} $status->{time_in_lon}" : 'Not active' %><hr />
 % }
 
 @@ timeclock.html.ep
@@ -97,7 +97,7 @@ Lon: <div id="div_lon"></div>
 %= hidden_field 'lat' => '', id => 'lat'
 %= hidden_field 'lon' => '', id => 'lon'
 % if ( my $status = $timeclock->status(session 'id') ) {
-  <%= $status->{time_in} %><br />
+  <%= $status->{time_in} %>(<%= $status->{time_in_age} %>)<br />
   %= hidden_field clock => 'out'
   %= submit_button 'Clock out'
 % } else {

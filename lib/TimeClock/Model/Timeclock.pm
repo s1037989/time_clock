@@ -7,7 +7,7 @@ has 'pg';
 
 sub status {
   my $self = shift;
-  my $status = $self->pg->db->query('select * from timeclock where user_id = ? order by time_in desc limit 1', shift)->hash;
+  my $status = $self->pg->db->query('select *, age(case when time_out is not null then time_out else now() end, time_in) as time_in_age from timeclock where user_id = ? order by time_in desc limit 1', shift)->hash;
   return $status->{time_out} ? undef : $status;
 }
 

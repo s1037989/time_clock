@@ -1019,3 +1019,32 @@ Global symbol "$timeclock" requires explicit package name at template timeclock.
 [Thu Jul  2 10:12:29 2015] [debug] Routing to a callback
 [Thu Jul  2 10:12:29 2015] [debug] Rendering template "admin.html.ep" from DATA section
 [Thu Jul  2 10:12:29 2015] [debug] 200 OK (0.014186s, 70.492/s)
+[Thu Jul  2 10:22:15 2015] [debug] Reading configuration file "/home/stefan/Dropbox/Projects/time_clock/time_clock.conf"
+[Thu Jul  2 10:22:15 2015] [debug] Your secret passphrase needs to be changed
+[Thu Jul  2 10:22:15 2015] [info] Listening at "http://*:3000"
+[Thu Jul  2 10:22:19 2015] [debug] GET "/admin"
+[Thu Jul  2 10:22:19 2015] [debug] Routing to a callback
+[Thu Jul  2 10:22:19 2015] [debug] Rendering template "admin.html.ep" from DATA section
+[Thu Jul  2 10:22:19 2015] [debug] 200 OK (0.021440s, 46.642/s)
+[Thu Jul  2 10:22:24 2015] [debug] GET "/admin"
+[Thu Jul  2 10:22:24 2015] [debug] Routing to a callback
+[Thu Jul  2 10:22:24 2015] [debug] Rendering cached template "admin.html.ep" from DATA section
+[Thu Jul  2 10:22:24 2015] [debug] 200 OK (0.004440s, 225.225/s)
+[Thu Jul  2 10:22:32 2015] [debug] GET "/"
+[Thu Jul  2 10:22:32 2015] [debug] Routing to a callback
+[Thu Jul  2 10:22:32 2015] [debug] 302 Found (0.002447s, 408.664/s)
+[Thu Jul  2 10:22:32 2015] [debug] GET "/timeclock"
+[Thu Jul  2 10:22:32 2015] [debug] Routing to a callback
+[Thu Jul  2 10:22:32 2015] [debug] Rendering template "timeclock.html.ep" from DATA section
+[Thu Jul  2 10:22:32 2015] [debug] 200 OK (0.011119s, 89.936/s)
+[Thu Jul  2 10:22:32 2015] [debug] GET "/"
+[Thu Jul  2 10:22:32 2015] [debug] Routing to a callback
+[Thu Jul  2 10:22:32 2015] [debug] 302 Found (0.001054s, 948.767/s)
+[Thu Jul  2 10:22:32 2015] [debug] GET "/timeclock"
+[Thu Jul  2 10:22:32 2015] [debug] Routing to a callback
+[Thu Jul  2 10:22:32 2015] [debug] Rendering cached template "timeclock.html.ep" from DATA section
+[Thu Jul  2 10:22:32 2015] [debug] 200 OK (0.003853s, 259.538/s)
+[Thu Jul  2 10:22:39 2015] [debug] GET "/timeclock"
+[Thu Jul  2 10:22:39 2015] [debug] Routing to a callback
+[Thu Jul  2 10:22:39 2015] [debug] Rendering cached template "timeclock.html.ep" from DATA section
+[Thu Jul  2 10:22:39 2015] [debug] 200 OK (0.005325s, 187.793/s)
