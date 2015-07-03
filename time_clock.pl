@@ -7,6 +7,8 @@ use Mojo::Pg;
 use TimeClock::Model::OAuth2;
 use TimeClock::Model::Timeclock;
 
+use DateTime::Format::Duration;
+
 my $config = plugin 'Config';
 
 helper 'pg' => sub { state $pg = Mojo::Pg->new(shift->config('pg')) };
@@ -39,11 +41,28 @@ get '/profile' => sub {
   $c->stash(user => $c->model->oauth2->find($c->session('id')));
 };
 
-get '/admin' => sub {
+get '/status' => {user => ''} => sub {
   my $c = shift;
   $c->redirect_to('connect') unless $c->session('id');
+  $c->stash(user => $c->param('user'));
   $c->stash(timeclock => $c->model->timeclock);
 };
+
+get '/history/:user' => {user => ''} => sub {
+  my $c = shift;
+  $c->redirect_to('connect') unless $c->session('id');
+  $c->stash(user => $c->param('user'));
+  $c->stash(timeclock => $c->model->timeclock);
+};
+
+get '/pay/:user/:ids' => sub {
+  my $c = shift;
+  $c->redirect_to('connect') unless $c->session('id');
+  $c->model->timeclock->pay(split /,/, $c->param('ids'));
+  $c->stash(user => $c->param('user'));
+  $c->stash(timeclock => $c->model->timeclock);
+  $c->redirect_to('historyuser', {user => $c->param('user')});
+} => 'payuser';
 
 get '/timeclock' => sub {
   my $c = shift;
@@ -67,11 +86,51 @@ app->start;
 
 __DATA__
 
-@@ admin.html.ep
+@@ historyuser.html.ep
+% my $week;
+<%= link_to "All user status" => 'status' %><hr />
+<%= $timeclock->user($user)->{first_name} %><br />
+<table>
+  <tr><th>week</th><th>Sunday</th><th>Monday</th><th>Tuesday</th><th>Wednesday</th><th>Thursday</th><th>Friday</th><th>Saturday</th><th>Total</th></tr>
+% my $history = $timeclock->history($user);
+% foreach my $week ( sort { $b cmp $a } keys %$history ) {
+  <tr>
+  <td><%= $week %>
+  % my $week_time;
+  % my $unpaid;
+  % my @unpaid;
+  % foreach my $dow ( qw/0 1 2 3 4 5 6/ ) {
+    <td>
+    % my $day_time;
+    % foreach my $e ( @{$history->{$week}->{$dow}} ) {
+      % $day_time = $day_time ? $day_time->add_duration($e->{duration}->clone) : $e->{duration}->clone;
+      % $week_time = $week_time ? $week_time->add_duration($e->{duration}->clone) : $e->{duration}->clone;
+      % $unpaid = $unpaid ? $unpaid->add_duration($e->{duration}->clone) : $e->{duration}->clone unless $e->{paid};
+      % push @unpaid, $e->{id} if !$e->{paid};
+      <%= link_to($e->{time_in}->hms => "https://www.google.com/maps/place//\@$e->{time_in_lat},$e->{time_in_lon},17z/data=!3m1!4b1!4m2!3m1!1s0x0:0x0") %> - <%= $e->{time_out} ? link_to($e->{time_out}->hms => "https://www.google.com/maps/place//\@$e->{time_in_lat},$e->{time_in_lon},17z/data=!3m1!4b1!4m2!3m1!1s0x0:0x0") : 'Active' %> (<%= $e->{paid} ? $timeclock->duration($e->{duration}) : link_to $timeclock->duration($e->{duration}) => 'payuser', {user => $user, ids => $e->{id}} %>)<br />
+    % }
+    % if ( $day_time ) {
+      <b><%= $timeclock->duration($day_time) %></b>
+    % }
+    </td>
+  % }
+  <td>
+  % if ( $unpaid ) {
+    <b><%= link_to $timeclock->duration($unpaid, 1) => 'payuser', {user => $user, ids => join(',', @unpaid)} %></b><br />
+  % }
+  % if ( $week_time ) {
+    <b><%= $timeclock->duration($week_time, 1) %></b><br />
+  % }
+  </td>
+  </tr>
+% }
+</table>
+
+@@ status.html.ep
 % foreach my $user ( @{$timeclock->users} ) {
   % my $status = $timeclock->status($user->{id});
-  Name: <%= $timeclock->user($user->{id})->{first_name} %><br />
-  Status: <%= $status ? "Active since $status->{time_in} ($status->{time_in_age}) from $status->{time_in_lat} $status->{time_in_lon}" : 'Not active' %><hr />
+  Name: <%= link_to $timeclock->user($user->{id})->{first_name} => 'historyuser', {user => $user->{id}} %><br />
+  Status: <%== $status ? "Active since ".link_to($status->{time_in}->datetime => "https://www.google.com/maps/place//\@$status->{time_in_lat},$status->{time_in_lon},17z/data=!3m1!4b1!4m2!3m1!1s0x0:0x0")." (".$timeclock->duration($status->{duration}).")" : 'Not active' %><hr />
 % }
 
 @@ timeclock.html.ep
@@ -91,13 +150,11 @@ __DATA__
   }
 </script>
 Name: <%= $user->{first_name} %><br />
-Lat: <div id="div_lat"></div>
-Lon: <div id="div_lon"></div>
 %= form_for timeclock => begin
 %= hidden_field 'lat' => '', id => 'lat'
 %= hidden_field 'lon' => '', id => 'lon'
 % if ( my $status = $timeclock->status(session 'id') ) {
-  <%= $status->{time_in} %>(<%= $status->{time_in_age} %>)<br />
+  <%= $status->{time_in} %>(<%= $timeclock->duration($status->{duration}) %>)<br />
   %= hidden_field clock => 'out'
   %= submit_button 'Clock out'
 % } else {
@@ -149,8 +206,13 @@ create table if not exists timeclock (
   time_in_lat text,
   time_in_lon text,
   time_out_lat text,
-  time_out_lon text
+  time_out_lon text,
+  paid        integer
 );
+CREATE OR REPLACE FUNCTION round_duration(TIMESTAMPTZ, TIMESTAMPTZ) 
+RETURNS INTERVAL AS $$ 
+  SELECT date_trunc('hour', age(case when $2 is not null then $2 else now() end, $1)) + INTERVAL '15 min' * ROUND(date_part('minute', age(case when $2 is not null then $2 else now() end, $1)) / 15.0) 
+$$ LANGUAGE SQL;
 
 -- 1 down
 drop table if exists providers;
