@@ -5,7 +5,7 @@ use UUID::Tiny ':std';
 
 use Math::Round 'nearest';
 use DateTime::Format::Pg;
-use DateTime::Format::Human::Duration;
+use DateTime::Format::Duration;
 
 has 'pg';
 

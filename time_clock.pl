@@ -7,8 +7,6 @@ use Mojo::Pg;
 use TimeClock::Model::OAuth2;
 use TimeClock::Model::Timeclock;
 
-use DateTime::Format::Duration;
-
 my $config = plugin 'Config';
 
 helper 'pg' => sub { state $pg = Mojo::Pg->new(shift->config('pg')) };
@@ -27,18 +25,7 @@ plugin "OAuth2Accounts" => {
 
 get '/' => sub {
   my $c = shift;
-  $c->session('id') ? $c->redirect_to('timeclock') : $c->redirect_to('connect');
-};
-
-get "/connect" => sub {
-  my $c = shift;
-  $c->session('token' => {}) unless $c->session('token');
-};
-
-get '/profile' => sub {
-  my $c = shift;
-  $c->redirect_to('connect') unless $c->session('id');
-  $c->stash(user => $c->model->oauth2->find($c->session('id')));
+  $c->session('id') ? $c->redirect_to('timeclock') : $c->redirect_to('connectprovider', {provider => 'facebook'});
 };
 
 get '/status' => {user => ''} => sub {
@@ -163,24 +150,6 @@ Name: <%= $user->{first_name} %><br />
   %= submit_button 'Clock in'
 % }
 % end
-
-@@ connect.html.ep
-% if ( my $error = flash 'error' ) {
-  <h3><%= $error %></h3>
-% }
-<p>Please login by connecting with one of the following authentication providers.  Each will ask for only your basic information so that we can copy this information into our database and create a passwordless user account for you.</p>
-<%= defined session('token')->{facebook} ? 'Re-connect' : 'Connect' %> with <%= link_to 'Facebook' => 'connectprovider', {provider => 'facebook'} %><br />
-<%= defined session('token')->{twitter} ? 'Re-connect' : 'Connect' %> with <%= link_to 'Twitter' => 'connectprovider', {provider => 'twitter'} %><br />
-<%= defined session('token')->{google} ? 'Re-connect' : 'Connect' %> with <%= link_to 'Google' => 'connectprovider', {provider => 'google'} %><br />
-<%= defined session('token')->{mocked} ? 'Re-connect' : 'Connect' %> with <%= link_to 'Mocked' => 'connectprovider', {provider => 'mocked'} %><br />
-<%= link_to "Connect!", $c->oauth2->auth_url("facebook", scope => "user_about_me email") %><br />
-<p><%= link_to Logout => 'logout' %></p>
-
-@@ profile.html.ep
-Email: <%= $user->{email} %><br />
-First Name: <%= $user->{first_name} %><br />
-Last Name: <%= $user->{last_name} %><br />
-<p><%= link_to Logout => 'logout' %></p>
 
 @@ migrations
 -- 1 up
