@@ -1,9 +1,7 @@
-package TimeClock::Model::OAuth2;
-use Mojo::Base -base;
+package TimeClock::Model::Pg::Users;
+use Mojo::Base 'TimeClock::Model::Pg';
 
 use UUID::Tiny ':std';
-
-has 'pg';
 
 sub store {
   my $self = shift;
@@ -29,3 +27,26 @@ sub store {
 sub find { shift->pg->db->query('select * from users where id = ?', shift)->hash }
 
 1;
+
+__DATA__
+
+@@ migrations
+-- 1 up
+create table if not exists users (
+  id         text primary key,
+  email      text,
+  first_name text,
+  last_name  text,
+  created    timestamptz not null default now()
+);
+create table if not exists providers (
+  id          text,
+  provider_id text,
+  provider    text,
+  created     timestamptz not null default now(),
+  PRIMARY KEY (id, provider_id, provider)
+);
+
+-- 1 down
+drop table if exists providers;
+drop table if exists users;

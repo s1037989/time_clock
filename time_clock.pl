@@ -1,50 +1,52 @@
 use Mojolicious::Lite;
 
-use lib '../Mojolicious-Plugin-OAuth2Accounts/lib';
+use lib '../Mojolicious-Plugin-OAuth2-Fetch/lib';
 use lib 'lib';
 
 use Mojo::Pg;
-use TimeClock::Model::OAuth2;
-use TimeClock::Model::Timeclock;
+use TimeClock::Model::Pg::Users;
+use TimeClock::Model::Pg::Timeclock;
 
 my $config = plugin 'Config';
 
-helper 'pg' => sub { state $pg = Mojo::Pg->new(shift->config('pg')) };
-helper 'model.oauth2' => sub { state $users = TimeClock::Model::OAuth2->new(pg => shift->pg) };
-helper 'model.timeclock' => sub { state $timeclock = TimeClock::Model::Timeclock->new(pg => shift->pg) };
-app->sessions->default_expiration(86400*365*10);
-app->pg->migrations->from_data->migrate;
-
-plugin "OAuth2Accounts" => {
-  on_logout => '/',
+plugin "OAuth2::Fetch" => {
   on_success => 'timeclock',
   on_error => 'connect',
-  on_connect => sub { shift->model->oauth2->store(@_) },
+  on_connect => sub { shift->model->users->store(@_) },
+  on_disconnect => '/',
+  default_provider => 'facebook',
   providers => $config->{oauth2},
 };
 
+helper 'pg' => sub { state $pg = Mojo::Pg->new(shift->config('pg')) };
+helper 'model.users' => sub { state $users = TimeClock::Model::Pg::Users->new(pg => shift->pg) };
+helper 'model.timeclock' => sub { state $timeclock = TimeClock::Model::Pg::Timeclock->new(pg => shift->pg) };
+
+app->sessions->default_expiration(86400*365*10);
+app->model->users->migrate;
+app->model->timeclock->migrate;
+
 get '/' => sub {
   my $c = shift;
-  $c->session('id') ? $c->redirect_to('timeclock') : $c->redirect_to('connectprovider', {provider => 'facebook'});
+  $c->session('oauth2.id') ? $c->redirect_to('timeclock') : $c->redirect_to('connectprovider', {provider => 'facebook'});
 };
 
-get '/status' => {user => ''} => sub {
+get '/status' => sub {
   my $c = shift;
-  $c->redirect_to('connect') unless $c->session('id');
-  $c->stash(user => $c->param('user'));
+  $c->redirect_to('connect') unless $c->session('oauth2.id');
   $c->stash(timeclock => $c->model->timeclock);
 };
 
 get '/history/:user' => {user => ''} => sub {
   my $c = shift;
-  $c->redirect_to('connect') unless $c->session('id');
+  $c->redirect_to('connect') unless $c->session('oauth2.id');
   $c->stash(user => $c->param('user'));
   $c->stash(timeclock => $c->model->timeclock);
 };
 
 get '/pay/:user/:ids' => sub {
   my $c = shift;
-  $c->redirect_to('connect') unless $c->session('id');
+  $c->redirect_to('connect') unless $c->session('oauth2.id');
   $c->model->timeclock->pay(split /,/, $c->param('ids'));
   $c->stash(user => $c->param('user'));
   $c->stash(timeclock => $c->model->timeclock);
@@ -53,18 +55,18 @@ get '/pay/:user/:ids' => sub {
 
 get '/timeclock' => sub {
   my $c = shift;
-  $c->redirect_to('connect') unless $c->session('id');
-  $c->stash(user => $c->model->oauth2->find($c->session('id')));
+  $c->redirect_to('connect') unless $c->session('oauth2.id');
+  $c->stash(user => $c->model->timeclock->user($c->session('oauth2.id')));
   $c->stash(timeclock => $c->model->timeclock);
 };
 
 post '/timeclock' => sub {
   my $c = shift;
-  $c->redirect_to('connect') unless $c->session('id');
+  $c->redirect_to('connect') unless $c->session('oauth2.id');
   if ( $c->param('clock') eq 'in' ) {
-    $c->model->timeclock->clock_in($c->session('id'), $c->param('lat'), $c->param('lon'));
+    $c->model->timeclock->clock_in($c->session('oauth2.id'), $c->param('lat'), $c->param('lon'));
   } elsif ( $c->param('clock') eq 'out' ) {
-    $c->model->timeclock->clock_out($c->session('id'), $c->param('lat'), $c->param('lon'));
+    $c->model->timeclock->clock_out($c->session('oauth2.id'), $c->param('lat'), $c->param('lon'));
   }
   $c->redirect_to('timeclock');
 };
@@ -114,6 +116,7 @@ __DATA__
 </table>
 
 @@ status.html.ep
+(I am <%= session 'oauth2.id' %>)<br />
 % foreach my $user ( @{$timeclock->users} ) {
   % my $status = $timeclock->status($user->{id});
   Name: <%= link_to $timeclock->user($user->{id})->{first_name} => 'historyuser', {user => $user->{id}} %><br />
@@ -140,8 +143,8 @@ Name: <%= $user->{first_name} %><br />
 %= form_for timeclock => begin
 %= hidden_field 'lat' => '', id => 'lat'
 %= hidden_field 'lon' => '', id => 'lon'
-% if ( my $status = $timeclock->status(session 'id') ) {
-  <%= $status->{time_in} %>(<%= $timeclock->duration($status->{duration}) %>)<br />
+% if ( my $status = $timeclock->status(session 'oauth2.id') ) {
+%#  <%= $status->{time_in} %>(<%= $timeclock->duration($status->{duration}) %>)<br />
   %= hidden_field clock => 'out'
   %= submit_button 'Clock out'
 % } else {
@@ -150,40 +153,3 @@ Name: <%= $user->{first_name} %><br />
   %= submit_button 'Clock in'
 % }
 % end
-
-@@ migrations
--- 1 up
-create table if not exists users (
-  id         text primary key,
-  email      text,
-  first_name text,
-  last_name  text,
-  created    timestamptz not null default now()
-);
-create table if not exists providers (
-  id          text,
-  provider_id text,
-  provider    text,
-  created     timestamptz not null default now(),
-  PRIMARY KEY (id, provider_id, provider)
-);
-create table if not exists timeclock (
-  id          serial primary key,
-  user_id     text,
-  time_in     timestamptz,
-  time_out    timestamptz,
-  time_in_lat text,
-  time_in_lon text,
-  time_out_lat text,
-  time_out_lon text,
-  paid        integer
-);
-CREATE OR REPLACE FUNCTION round_duration(TIMESTAMPTZ, TIMESTAMPTZ) 
-RETURNS INTERVAL AS $$ 
-  SELECT date_trunc('hour', age(case when $2 is not null then $2 else now() end, $1)) + INTERVAL '15 min' * ROUND(date_part('minute', age(case when $2 is not null then $2 else now() end, $1)) / 15.0) 
-$$ LANGUAGE SQL;
-
--- 1 down
-drop table if exists providers;
-drop table if exists users;
-drop table if exists timeclock;

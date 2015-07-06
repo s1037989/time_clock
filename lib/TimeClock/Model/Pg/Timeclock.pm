@@ -1,13 +1,9 @@
-package TimeClock::Model::Timeclock;
-use Mojo::Base -base;
-
-use UUID::Tiny ':std';
+package TimeClock::Model::Pg::Timeclock;
+use Mojo::Base 'TimeClock::Model::Pg';
 
 use Math::Round 'nearest';
 use DateTime::Format::Pg;
 use DateTime::Format::Duration;
-
-has 'pg';
 
 sub status {
   my $self = shift;
@@ -57,23 +53,29 @@ sub clock_out { shift->pg->db->query('update timeclock set time_out = now(), tim
 
 sub users { shift->pg->db->query('select id from users')->hashes }
 
-sub user { shift->pg->db->query('select first_name from users where id = ?', shift)->hash }
+sub user { shift->pg->db->query('select * from users where id = ?', shift)->hash }
 
 1;
 
-__END__
+__DATA__
 
-27 4 lkjdlkd
-27 4 lklksd
-27 5 lkjdlkjd
-26 1 hjkj
+@@ migrations
+-- 1 up
+create table if not exists timeclock (
+  id          serial primary key,
+  user_id     text,
+  time_in     timestamptz,
+  time_out    timestamptz,
+  time_in_lat text,
+  time_in_lon text,
+  time_out_lat text,
+  time_out_lon text,
+  paid        integer
+);
+CREATE OR REPLACE FUNCTION round_duration(TIMESTAMPTZ, TIMESTAMPTZ) 
+RETURNS INTERVAL AS $$ 
+  SELECT date_trunc('hour', age(case when $2 is not null then $2 else now() end, $1)) + INTERVAL '15 min' * ROUND(date_part('minute', age(case when $2 is not null then $2 else now() end, $1)) / 15.0) 
+$$ LANGUAGE SQL;
 
-27
-  4
-    lkdjlk
-    dlkjdlk
-  5
-    dkkjd
-26
-  1
-    lklkjd
+-- 1 down
+drop table if exists timeclock;
