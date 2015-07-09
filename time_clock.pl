@@ -14,7 +14,7 @@ plugin "OAuth2::Fetch" => {
   on_error => 'connect',
   on_connect => sub { shift->model->users->store(@_) },
   on_disconnect => '/',
-  default_provider => 'facebook',
+  default_provider => 'mocked',
   providers => $config->{oauth2},
 };
 
@@ -26,50 +26,48 @@ app->sessions->default_expiration(86400*365*10);
 app->model->users->migrate;
 app->model->timeclock->migrate;
 
+app->routes->add_condition(is_admin => sub {
+  my ($route, $c, $captures, $require) = @_;
+  return $require ? $c->model->users->find($c->session('oauth2.id'))->{admin} : 1;
+});
+
 get '/' => sub {
   my $c = shift;
-  $c->session('oauth2.id') ? $c->redirect_to('timeclock') : $c->redirect_to('connectprovider', {provider => 'facebook'});
-};
-
-get '/status' => sub {
-  my $c = shift;
-  $c->redirect_to('connect') unless $c->session('oauth2.id');
-  $c->stash(timeclock => $c->model->timeclock);
-};
-
-get '/history/:user' => {user => ''} => sub {
-  my $c = shift;
-  $c->redirect_to('connect') unless $c->session('oauth2.id');
-  $c->stash(user => $c->param('user'));
-  $c->stash(timeclock => $c->model->timeclock);
-};
-
-get '/pay/:user/:ids' => sub {
-  my $c = shift;
-  $c->redirect_to('connect') unless $c->session('oauth2.id');
-  $c->model->timeclock->pay(split /,/, $c->param('ids'));
-  $c->stash(user => $c->param('user'));
-  $c->stash(timeclock => $c->model->timeclock);
-  $c->redirect_to('historyuser', {user => $c->param('user')});
-} => 'payuser';
-
-get '/timeclock' => sub {
-  my $c = shift;
-  $c->redirect_to('connect') unless $c->session('oauth2.id');
+  return $c->redirect_to('connectprovider') unless $c->session('oauth2.id');
   $c->stash(user => $c->model->timeclock->user($c->session('oauth2.id')));
   $c->stash(timeclock => $c->model->timeclock);
-};
+} => 'timeclock';
 
-post '/timeclock' => sub {
+post '/' => (is_connected => 1) => sub {
   my $c = shift;
-  $c->redirect_to('connect') unless $c->session('oauth2.id');
   if ( $c->param('clock') eq 'in' ) {
     $c->model->timeclock->clock_in($c->session('oauth2.id'), $c->param('lat'), $c->param('lon'));
   } elsif ( $c->param('clock') eq 'out' ) {
     $c->model->timeclock->clock_out($c->session('oauth2.id'), $c->param('lat'), $c->param('lon'));
   }
   $c->redirect_to('timeclock');
+} => 'timeclock';
+
+under '/admin' => (is_admin => 1);
+
+get '/status' => sub {
+  my $c = shift;
+  $c->stash(timeclock => $c->model->timeclock);
 };
+
+get '/history/:user' => {user => ''} => sub {
+  my $c = shift;
+  $c->stash(user => $c->param('user'));
+  $c->stash(timeclock => $c->model->timeclock);
+};
+
+get '/pay/:user/:ids' => sub {
+  my $c = shift;
+  $c->model->timeclock->pay(split /,/, $c->param('ids'));
+  $c->stash(user => $c->param('user'));
+  $c->stash(timeclock => $c->model->timeclock);
+  $c->redirect_to('historyuser', {user => $c->param('user')});
+} => 'payuser';
 
 app->start;
 
@@ -116,6 +114,7 @@ __DATA__
 </table>
 
 @@ status.html.ep
+<%= link_to 'Back to my Timeclock' => 'timeclock' %><hr />
 (I am <%= session 'oauth2.id' %>)<br />
 % foreach my $user ( @{$timeclock->users} ) {
   % my $status = $timeclock->status($user->{id});
@@ -139,8 +138,11 @@ __DATA__
     }, null, {enableHighAccuracy: true, timeout: 5000, maximumAge: 1000});
   }
 </script>
+% if ( $user->{admin} ) {
+  <%= link_to Admin => 'status' %><hr />
+% }
 Name: <%= $user->{first_name} %><br />
-%= form_for timeclock => begin
+%= form_for timeclock => (method => 'POST') => begin
 %= hidden_field 'lat' => '', id => 'lat'
 %= hidden_field 'lon' => '', id => 'lon'
 % if ( my $status = $timeclock->status(session 'oauth2.id') ) {

@@ -37,6 +37,7 @@ create table if not exists users (
   email      text,
   first_name text,
   last_name  text,
+  admin      integer,
   created    timestamptz not null default now()
 );
 create table if not exists providers (
